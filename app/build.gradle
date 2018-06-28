@@ -1,0 +1,45 @@
+apply plugin: 'com.android.application'
+
+apply plugin: 'kotlin-android'
+
+apply plugin: 'kotlin-android-extensions'
+
+android {
+    compileSdkVersion 27
+    defaultConfig {
+        applicationId "edu.galileo.innovation.hexapod.robot"
+        minSdkVersion 27
+        targetSdkVersion 27
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    compileOnly 'com.google.android.things:androidthings:0.3-devpreview'
+
+    implementation 'com.jakewharton.timber:timber:4.6.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:0.22.2'
+    implementation 'com.google.android.things.contrib:driver-pwmservo:0.3'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jre7:$kotlin_version"
+
+    // Firebase
+    implementation 'com.google.firebase:firebase-core:11.6.0'
+    implementation 'com.google.firebase:firebase-database:11.6.0'
+    implementation 'com.google.firebase:firebase-storage:11.6.0'
+
+    // Cloud Vision API
+    implementation 'com.google.apis:google-api-services-vision:v1-rev22-1.22.0'
+    implementation 'com.google.api-client:google-api-client-android:1.22.0' exclude module: 'httpclient'
+    implementation 'com.google.http-client:google-http-client-gson:1.22.0' exclude module: 'httpclient'
+}
+
+apply plugin: 'com.google.gms.google-services'
+
