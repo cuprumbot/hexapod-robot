@@ -1,5 +1,6 @@
 package edu.galileo.innovation.hexapod.robot
 
+import android.util.Log
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.launch
 
@@ -65,6 +66,9 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
                                             120.0+23.0, // LEFT MID - REPLACEMENT SERVO
                                             120.0+25.0  // LEFT BACK - REPLACEMENT SERVO
                                         )
+
+    private var verticalStore = arrayOf(170.0, 170.0, 170.0, 10.0, 10.0, 10.0)
+    private var kneeStore = arrayOf(170.0, 170.0, 170.0, 10.0, 10.0, 10.0)
 
     init {
         // Set knees
@@ -153,6 +157,8 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
     }
 
     fun forward () {
+
+        Log.d(TAG, "Moving forward!")
         launch {
             for (i in 1..5) {
                 // Raise three legs and move them forward
@@ -187,6 +193,31 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
             delay(DELAY_FORWARD/2)
             moveVerticalRLR(VERTICAL_RETURN_TO_BASE)
             moveVerticalLRL(VERTICAL_RETURN_TO_BASE)
+        }
+    }
+
+    fun store () {
+        val TEST_RISE = 109.0
+
+        launch {
+            moveHorizontalRLR(HORIZONTAL_RETURN_TO_BASE)
+            moveHorizontalLRL(HORIZONTAL_RETURN_TO_BASE)
+
+            // Move the legs to their base position +/- some offset
+            // Useful for aligning the legs (servo arms or horns may be in slightly different position)
+            // Some servos have 180 - ANGLE because my replacement servos move in the opposite direction
+            leftHat.setAngle(legs[3][VERTICAL], (verticalBase[3] - TEST_RISE))
+            leftHat.setAngle(legs[4][VERTICAL], 180.0 - (verticalBase[4] - TEST_RISE))
+            leftHat.setAngle(legs[5][VERTICAL], (verticalBase[5] - TEST_RISE))
+            delay(DELAY_FORWARD)
+            rightHat.setAngle(legs[0][VERTICAL], (verticalBase[0] + TEST_RISE))
+            rightHat.setAngle(legs[1][VERTICAL], 180.0 - (verticalBase[1] + TEST_RISE))
+            rightHat.setAngle(legs[2][VERTICAL], 180.0 - (verticalBase[2] + TEST_RISE))
+            delay(DELAY_FORWARD)
+            for (i in 0..2) {
+                leftHat.setAngle(legs[i+3][KNEE], kneeStore[i+3])
+                rightHat.setAngle(legs[i+0][KNEE], kneeStore[i+0])
+            }
         }
     }
 

@@ -59,7 +59,8 @@ class MainActivity : Activity() {
     // Firebase
     private lateinit var database: FirebaseDatabase
     private lateinit var storage: FirebaseStorage
-    private lateinit var reference: DatabaseReference
+    private lateinit var cameraState: DatabaseReference
+    private lateinit var moveState: DatabaseReference
     // Handler and thread for camera
     private lateinit var cameraHandler: Handler
     private lateinit var cameraHandlerThread: HandlerThread
@@ -68,6 +69,7 @@ class MainActivity : Activity() {
     private lateinit var cloudHandlerThread: HandlerThread
 
     private var takePictures = false
+    private var moveDirection = "stand"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,7 +86,8 @@ class MainActivity : Activity() {
         database = FirebaseDatabase.getInstance()
         storage = FirebaseStorage.getInstance()
 
-        reference = FirebaseDatabase.getInstance().reference.child("state")
+        cameraState = FirebaseDatabase.getInstance().reference.child("camera")
+        moveState = FirebaseDatabase.getInstance().reference.child("movement")
 
         // Thread for camera
         cameraHandlerThread = HandlerThread("CameraBackground")
@@ -100,21 +103,27 @@ class MainActivity : Activity() {
         camera = CameraHelper
         camera.initializeCamera(this, cameraHandler, onImageAvailableListener)
 
-        val stateListener = object: ValueEventListener {
+        val cameraStateListener = object: ValueEventListener {
             override fun onDataChange(dataSnapshot: DataSnapshot) {
-                val currState = dataSnapshot.child("state").value.toString()
-                if (currState == "started") {
-                    takePictures = true
-                } else if (currState == "stopped") {
-                    takePictures = false
-                }
+                takePictures = (dataSnapshot.child("state").value.toString() == "started")
             }
 
-            override fun onCancelled(p0: DatabaseError?) {
-                Log.w(TAG, "stateListener.onCancelled()")
+            override fun onCancelled(databaseError: DatabaseError) {
+                Log.w(TAG, "cameraStateListener.onCancelled()")
             }
         }
-        reference.addValueEventListener(stateListener)
+        cameraState.addValueEventListener(cameraStateListener)
+
+        val moveStateListener = object: ValueEventListener {
+            override fun onDataChange(dataSnapshot: DataSnapshot) {
+                moveDirection = dataSnapshot.child("state").value.toString()
+            }
+
+            override fun onCancelled(databaseError: DatabaseError) {
+                Log.w(TAG, "moveStateListener.onCancelled()")
+            }
+        }
+        moveState.addValueEventListener(moveStateListener)
 
         // Start the coroutine
         launch {
@@ -185,10 +194,12 @@ class MainActivity : Activity() {
                 log.child("timestamp").setValue(ServerValue.TIMESTAMP)
                 log.child("image").setValue(downloadUrl?.toString())
                 Log.i(TAG, "Image upload successful")
+                Log.i(TAG, ">>>>> " + log.key + " <<<<<")
 
                 // Update newest image
                 val update = HashMap<String,Any>()
                 update["url"] = downloadUrl.toString()
+                update["name"] = log.key
                 newest.updateChildren(update)
 
                 // Process image annotations
@@ -232,6 +243,55 @@ class MainActivity : Activity() {
             delay(1000L)
         }
 
+        //Log.w(TAG, moveDirection)
+        when (moveDirection) {
+            "forward" -> {
+                twoHats.forward()
+                delay(WALK_DELAY)
+                twoHats.forward()
+                delay(WALK_DELAY)
+                twoHats.forward()
+                delay(WALK_DELAY)
+                Log.w(TAG, moveDirection)
+            }
+            "left" -> {
+                twoHats.turnCounterClockwise()
+                delay(TURN_DELAY)
+                twoHats.turnCounterClockwise()
+                delay(TURN_DELAY)
+                twoHats.turnCounterClockwise()
+                delay(TURN_DELAY)
+                Log.w(TAG, moveDirection)
+            }
+            "right" -> {
+                twoHats.turnClockwise()
+                delay(TURN_DELAY)
+                twoHats.turnClockwise()
+                delay(TURN_DELAY)
+                twoHats.turnClockwise()
+                delay(TURN_DELAY)
+                Log.w(TAG, moveDirection)
+            }
+            else -> {
+                /*
+                twoHats.standStill()
+                delay(WALK_DELAY)
+                twoHats.standStill()
+                delay(WALK_DELAY)
+                twoHats.standStill()
+                delay(WALK_DELAY)
+                Log.w(TAG, moveDirection)
+                */
+                twoHats.store()
+                delay(WALK_DELAY)
+                twoHats.store()
+                delay(WALK_DELAY)
+                twoHats.store()
+                delay(WALK_DELAY)
+            }
+        }
+
+        /*
         if (HW_TEST) {
             // test() takes the servos to their resting position
             twoHats.test()
@@ -278,6 +338,7 @@ class MainActivity : Activity() {
             delay(TURN_DELAY)
             */
         }
+        */
 
         moveServo()
     }

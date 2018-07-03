@@ -18,7 +18,7 @@ import java.util.HashMap
 object CloudVisionUtils {
     private const val TAG = "CloudVisionUtils"
 
-    private const val CLOUD_VISION_API_KEY = "PUT YOUR API KEY HERE"
+    private const val CLOUD_VISION_API_KEY = ""
     private const val LABEL_DETECTION = "LABEL_DETECTION"
     private const val MAX_LABEL_RESULTS = 10
 
