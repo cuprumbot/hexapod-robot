@@ -27,13 +27,15 @@ private const val HORIZONTAL_RIGHT_AGGRO    = 45.0
 private const val HORIZONTAL_LEFT_AGGRO     = -45.0
 private const val HORIZONTAL_RETURN_TO_BASE = 0.0
 
-private const val KNEE_BASE = 90.0
-private const val DELAY_TURN            = 80
-private const val DELAY_FORWARD         = 120
+private const val KNEE_BASE                 = 90.0
+private const val DELAY_TURN                = 100
+private const val DELAY_FORWARD             = 120
 
 class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
     private var rightHat = rHat
     private var leftHat = lHat
+
+    private var stored = false
 
     private var legs = arrayOf  (
                                     arrayOf(8, 9, 10),  // RIGHT FRONT
@@ -47,28 +49,28 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
     // Base positions +/- offsets
     // Offsets caused by the position of the arms and screws of the servos
     private var horizontalBase = arrayOf(
-                                            85.0-20.0,  // RIGHT FRONT
-                                            90.0+15.0,  // RIGHT MID
-                                            110.0+20.0, // RIGHT BACK
-                                            95.0+10.0,  // LEFT FRONT
-                                            90.0+10.0,  // LEFT MID
-                                            70.0        // LEFT BACK
+                                            85.0-20.0,  // RIGHT FRONT (90-5)
+                                            90.0+5.0,   // RIGHT MID
+                                            110.0+5.0,  // RIGHT BACK (90+20)
+                                            95.0+10.0,  // LEFT FRONT (90+5)
+                                            90.0+15.0,  // LEFT MID
+                                            70.0+5.0    // LEFT BACK (90-20)
                                         )
 
     // Right: lower to rise the spider (lower the leg)
     // Left: higher to rise the spider (lower the leg)
     // Offsets caused by the position of the arms and screws of the servos
     private var verticalBase = arrayOf(
-                                            60.0+0.0,   // RIGHT FRONT
-                                            60.0+12.0,  // RIGHT MID - REPLACEMENT SERVO
-                                            60.0+20.0,  // RIGHT BACK
-                                            120.0+20.0, // LEFT FRONT
-                                            120.0+23.0, // LEFT MID - REPLACEMENT SERVO
-                                            120.0+25.0  // LEFT BACK - REPLACEMENT SERVO
+                                            50.0+7.0,   // RIGHT FRONT
+                                            50.0-2.0,   // RIGHT MID - REPLACEMENT SERVO
+                                            50.0-9.0,   // RIGHT BACK
+                                            130.0-4.0,  // LEFT FRONT
+                                            130.0-9.0,  // LEFT MID - REPLACEMENT SERVO
+                                            130.0+0.0   // LEFT BACK - REPLACEMENT SERVO
                                         )
 
-    private var verticalStore = arrayOf(170.0, 170.0, 170.0, 10.0, 10.0, 10.0)
-    private var kneeStore = arrayOf(170.0, 170.0, 170.0, 10.0, 10.0, 10.0)
+    private var verticalStore = arrayOf(160.0, 160.0, 160.0, 20.0, 20.0, 20.0)
+    private var kneeStore = arrayOf(178.0, 178.0, 178.0, 2.0, 2.0, 2.0)
 
     init {
         // Set knees
@@ -76,9 +78,20 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
             leftHat.setAngle(legs[i+3][KNEE], KNEE_BASE)
             rightHat.setAngle(legs[i+0][KNEE], KNEE_BASE)
         }
+        Log.d(TAG, "Robot ready!")
     }
 
-    fun turnClockwiseImproved () {      /* TESTING PENDING */
+    fun extendKnees () {
+        launch {
+            for (i in 0..2) {
+                leftHat.setAngle(legs[i + 3][KNEE], KNEE_BASE)
+                rightHat.setAngle(legs[i + 0][KNEE], KNEE_BASE)
+            }
+        }
+    }
+
+    /*
+    fun turnClockwiseImproved () {
         launch {
             moveVerticalRLR(VERTICAL_LEFT_RISE, VERTICAL_RIGHT_RISE)
             moveHorizontalRLR(HORIZONTAL_TURN_CLOCKWISE)
@@ -97,9 +110,16 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
             delay(DELAY_TURN)
         }
     }
+    */
 
     fun turnClockwise () {
         launch {
+            if (stored) {
+                extendKnees()
+                stored = false
+                delay(DELAY_TURN)
+            }
+
             // Slightly rotate legs while they are on the ground
             moveHorizontalRLR(HORIZONTAL_TURN_CLOCKWISE)
             moveHorizontalLRL(HORIZONTAL_TURN_CLOCKWISE)
@@ -129,6 +149,12 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
 
     fun turnCounterClockwise () {
         launch {
+            if (stored) {
+                extendKnees()
+                stored = false
+                delay(DELAY_TURN)
+            }
+
             // Slightly rotate legs while they are on the ground
             moveHorizontalLRL(HORIZONTAL_TURN_COUNTERCW)
             moveHorizontalRLR(HORIZONTAL_TURN_COUNTERCW)
@@ -157,14 +183,19 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
     }
 
     fun forward () {
-
-        Log.d(TAG, "Moving forward!")
         launch {
+            if (stored) {
+                extendKnees()
+                stored = false
+                delay(DELAY_TURN)
+            }
+
             for (i in 1..5) {
                 // Raise three legs and move them forward
                 // The legs on the ground move backwards
-                moveVerticalRLR(VERTICAL_LEFT_RISE, VERTICAL_RIGHT_RISE)
                 moveVerticalLRL(VERTICAL_RETURN_TO_BASE)
+                //delay(DELAY_FORWARD)
+                moveVerticalRLR(VERTICAL_LEFT_RISE, VERTICAL_RIGHT_RISE)
                 delay(DELAY_FORWARD)
                 moveHorizontalRLR(HORIZONTAL_LEFT_FORWARD, HORIZONTAL_RIGHT_FORWARD)
                 moveHorizontalLRL(-HORIZONTAL_LEFT_FORWARD, -HORIZONTAL_RIGHT_FORWARD)
@@ -172,9 +203,11 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
 
                 // Raise the other three legs and move them forward
                 // The legs on the ground move backwards
-                moveVerticalLRL(VERTICAL_LEFT_RISE, VERTICAL_RIGHT_RISE)
                 moveVerticalRLR(VERTICAL_RETURN_TO_BASE)
+                //delay(DELAY_FORWARD)
+                moveVerticalLRL(VERTICAL_LEFT_RISE, VERTICAL_RIGHT_RISE)
                 delay(DELAY_FORWARD)
+
                 moveHorizontalLRL(HORIZONTAL_LEFT_FORWARD, HORIZONTAL_RIGHT_FORWARD)
                 moveHorizontalRLR(-HORIZONTAL_LEFT_FORWARD, -HORIZONTAL_RIGHT_FORWARD)
                 delay(DELAY_FORWARD)
@@ -187,41 +220,48 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
 
     fun standStill () {
         launch {
+            if (stored) {
+                extendKnees()
+                stored = false
+                delay(DELAY_TURN)
+            }
+
             // Return all legs to base position
             moveHorizontalRLR(HORIZONTAL_RETURN_TO_BASE)
             moveHorizontalLRL(HORIZONTAL_RETURN_TO_BASE)
             delay(DELAY_FORWARD/2)
             moveVerticalRLR(VERTICAL_RETURN_TO_BASE)
             moveVerticalLRL(VERTICAL_RETURN_TO_BASE)
+            delay(DELAY_FORWARD/2)
         }
     }
 
     fun store () {
-        val TEST_RISE = 109.0
-
         launch {
-            moveHorizontalRLR(HORIZONTAL_RETURN_TO_BASE)
-            moveHorizontalLRL(HORIZONTAL_RETURN_TO_BASE)
+            // Raise the legs of the hexapod to store the robot
+            leftHat.setAngle(legs[LEFT_FRONT][VERTICAL], verticalStore[LEFT_FRONT])
+            delay(DELAY_FORWARD)
+            leftHat.setAngle(legs[LEFT_MID][VERTICAL], 180.0 - verticalStore[LEFT_MID])
+            delay(DELAY_FORWARD)
+            leftHat.setAngle(legs[LEFT_BACK][VERTICAL], verticalStore[LEFT_BACK])
+            delay(DELAY_FORWARD)
+            rightHat.setAngle(legs[RIGHT_FRONT][VERTICAL], verticalStore[RIGHT_FRONT])
+            rightHat.setAngle(legs[RIGHT_MID][VERTICAL], 180.0 - verticalStore[RIGHT_MID])
+            rightHat.setAngle(legs[RIGHT_BACK][VERTICAL], 180.0 - verticalStore[RIGHT_BACK])
+            delay(DELAY_FORWARD)
 
-            // Move the legs to their base position +/- some offset
-            // Useful for aligning the legs (servo arms or horns may be in slightly different position)
-            // Some servos have 180 - ANGLE because my replacement servos move in the opposite direction
-            leftHat.setAngle(legs[3][VERTICAL], (verticalBase[3] - TEST_RISE))
-            leftHat.setAngle(legs[4][VERTICAL], 180.0 - (verticalBase[4] - TEST_RISE))
-            leftHat.setAngle(legs[5][VERTICAL], (verticalBase[5] - TEST_RISE))
-            delay(DELAY_FORWARD)
-            rightHat.setAngle(legs[0][VERTICAL], (verticalBase[0] + TEST_RISE))
-            rightHat.setAngle(legs[1][VERTICAL], 180.0 - (verticalBase[1] + TEST_RISE))
-            rightHat.setAngle(legs[2][VERTICAL], 180.0 - (verticalBase[2] + TEST_RISE))
-            delay(DELAY_FORWARD)
+            // Bend the knees of the hexapod to store the robot
             for (i in 0..2) {
                 leftHat.setAngle(legs[i+3][KNEE], kneeStore[i+3])
                 rightHat.setAngle(legs[i+0][KNEE], kneeStore[i+0])
             }
+            delay(DELAY_FORWARD)
+
+            stored = true
         }
     }
 
-    fun test () {
+    fun callibrate () {
         val TEST_RISE = 10.0
 
         launch {
@@ -231,12 +271,12 @@ class ServoDoubleHat (rHat: ServoHat, lHat: ServoHat) {
             // Move the legs to their base position +/- some offset
             // Useful for aligning the legs (servo arms or horns may be in slightly different position)
             // Some servos have 180 - ANGLE because my replacement servos move in the opposite direction
-            leftHat.setAngle(legs[3][VERTICAL], (verticalBase[3] - TEST_RISE))
-            leftHat.setAngle(legs[4][VERTICAL], 180.0 - (verticalBase[4] - TEST_RISE))
-            leftHat.setAngle(legs[5][VERTICAL], (verticalBase[5] - TEST_RISE))
-            rightHat.setAngle(legs[0][VERTICAL], (verticalBase[0] + TEST_RISE))
-            rightHat.setAngle(legs[1][VERTICAL], 180.0 - (verticalBase[1] + TEST_RISE))
-            rightHat.setAngle(legs[2][VERTICAL], 180.0 - (verticalBase[2] + TEST_RISE))
+            leftHat.setAngle(legs[LEFT_FRONT][VERTICAL], (verticalBase[LEFT_FRONT] - TEST_RISE))
+            leftHat.setAngle(legs[LEFT_MID][VERTICAL], 180.0 - (verticalBase[LEFT_MID] - TEST_RISE))
+            leftHat.setAngle(legs[LEFT_BACK][VERTICAL], (verticalBase[LEFT_BACK] - TEST_RISE))
+            rightHat.setAngle(legs[RIGHT_FRONT][VERTICAL], (verticalBase[RIGHT_FRONT] + TEST_RISE))
+            rightHat.setAngle(legs[RIGHT_MID][VERTICAL], 180.0 - (verticalBase[RIGHT_MID] + TEST_RISE))
+            rightHat.setAngle(legs[RIGHT_BACK][VERTICAL], 180.0 - (verticalBase[RIGHT_BACK] + TEST_RISE))
         }
     }
 

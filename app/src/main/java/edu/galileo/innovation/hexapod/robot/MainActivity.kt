@@ -7,8 +7,6 @@ import android.util.Log
 import android.Manifest
 import android.os.Handler
 import android.os.HandlerThread
-// Hardware
-import com.zugaldia.robocar.hardware.adafruit2348.AdafruitPwm
 // Coroutines
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.launch
@@ -24,6 +22,11 @@ import com.google.firebase.storage.FirebaseStorage
 // Utils
 import java.io.IOException
 import java.nio.ByteBuffer
+// Streaming
+import java.net.DatagramSocket
+import java.net.DatagramPacket
+import java.net.InetAddress
+import android.os.StrictMode
 
 /*
     Hardware
@@ -31,7 +34,7 @@ import java.nio.ByteBuffer
 // I2C configs
 const val I2C_DEVICE_NAME = "I2C1"
 const val RIGHT_ADDRESS = 0x40
-const val LEFT_ADDRESS = 0x41
+const val LEFT_ADDRESS = 0x42
 // Servo configs
 // Original     const val MIN_PULSE_MS = 1.0
 // Raspi        const val MIN_PULSE_MS = 0.5
@@ -44,11 +47,14 @@ const val MAX_CHANNEL = 15
 // Delays
 const val TURN_DELAY = 600L
 const val WALK_DELAY = 1000L
-
-const val HW_TEST = false
+/*
+    Other
+ */
 const val TAG = "Main"
+const val USING_FIREBASE = false
 
 class MainActivity : Activity() {
+
     // Servos
     private var rightServoHat: ServoHat = ServoHat(RIGHT_ADDRESS)
     private var leftServoHat: ServoHat = ServoHat(LEFT_ADDRESS)
@@ -56,20 +62,33 @@ class MainActivity : Activity() {
 
     // Camera
     private lateinit var camera: CameraHelper
+    private var cameraDelay = 1000L
+
     // Firebase
     private lateinit var database: FirebaseDatabase
     private lateinit var storage: FirebaseStorage
     private lateinit var cameraState: DatabaseReference
     private lateinit var moveState: DatabaseReference
+
     // Handler and thread for camera
     private lateinit var cameraHandler: Handler
     private lateinit var cameraHandlerThread: HandlerThread
+
     // Handler and thread for Cloud Vision API
     private lateinit var cloudHandler: Handler
     private lateinit var cloudHandlerThread: HandlerThread
 
+    // Streaming
+    private lateinit var socket: DatagramSocket
+    private lateinit var packet: DatagramPacket
+    private lateinit var address: InetAddress
+    private var port = 0
+    private var bufferSize = 255
+    private var buffer = ByteArray(bufferSize)
+
+    // Get from Firebase to control the robot
     private var takePictures = false
-    private var moveDirection = "stand"
+    private var moveDirection = "test"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,12 +144,32 @@ class MainActivity : Activity() {
         }
         moveState.addValueEventListener(moveStateListener)
 
+        val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
+        StrictMode.setThreadPolicy(policy)
+
+        if (!USING_FIREBASE) {
+            cameraDelay = 300L
+
+            Log.i(TAG, "Waiting for a datagram")
+            // Streaming
+            socket = DatagramSocket(4445)
+            packet = DatagramPacket(buffer, bufferSize)
+
+            socket.receive(packet)
+            Log.i(TAG, "Got the starting datagram!")
+            address = packet.address
+            port = packet.port
+            Log.d(TAG, "Address $address - Port: $port")
+        }
+
         // Start the coroutine
         launch {
             delay(1000L)
-            Log.d(TAG,"Starting!")
+            Log.i(TAG,"Starting!")
             moveServo()
         }
+
+        Log.e(TAG, "After launching... (this shouldn't be seen)")
     }
 
     override fun onDestroy() {
@@ -149,7 +188,7 @@ class MainActivity : Activity() {
     // Listener for new images
     private val onImageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
         // Read the image
-        val image = reader.acquireLatestImage()
+        val image = reader.acquireNextImage()
         val imageBuf = image.planes[0].buffer
         val imageBytes = ByteArray(imageBuf.remaining())
         imageBuf.get(imageBytes)
@@ -173,11 +212,26 @@ class MainActivity : Activity() {
         bmp.compress(Bitmap.CompressFormat.JPEG, 100, outStream)
         // onPictureTaken() requires a byte array
         val out = outStream.toByteArray()
-        onPictureTaken(out)
+
+        if (USING_FIREBASE) {
+            onPictureTaken(out)
+        } else {
+            onPictureTakenLocal(out)
+        }
+    }
+
+    private fun onPictureTakenLocal(imageBytes: ByteArray) {
+        if (imageBytes.size > 60000) { return }
+
+        var dataPacket = DatagramPacket(imageBytes, imageBytes.size, address, port)
+        //Log.d("PS", "Address: " + address.toString() + " Port: " + port)
+        socket.send(dataPacket)
+
+        Log.i("PS", "Packet sent! - Length: ${dataPacket.length}")
     }
 
     // Upload the image to Firebase
-    private fun onPictureTaken(imageBytes: ByteArray?) {
+    private fun onPictureTaken(imageBytes: ByteArray) {
         if (imageBytes != null) {
             // Two things will be saved, metadata in the database, and the image in storage
             val log = database.getReference("logs").push()
@@ -193,8 +247,7 @@ class MainActivity : Activity() {
                 val downloadUrl = taskSnapshot.downloadUrl
                 log.child("timestamp").setValue(ServerValue.TIMESTAMP)
                 log.child("image").setValue(downloadUrl?.toString())
-                Log.i(TAG, "Image upload successful")
-                Log.i(TAG, ">>>>> " + log.key + " <<<<<")
+                Log.i(TAG, "Image upload successful! - Key: ${log.key}")
 
                 // Update newest image
                 val update = HashMap<String,Any>()
@@ -221,7 +274,7 @@ class MainActivity : Activity() {
             // Annotate image by uploading to Cloud Vision API
             try {
                 val annotations = CloudVisionUtils.annotateImage(imageBytes)
-                Log.d(TAG, "cloud vision annotations:" + annotations!!)
+                Log.d(TAG, "Cloud vision annotations: $annotations")
                 if (annotations != null) {
                     // Save the annotations in the database
                     ref.child("annotations").setValue(annotations)
@@ -236,14 +289,15 @@ class MainActivity : Activity() {
     // Make the robot walk and take pictures every time it stops
     private suspend fun moveServo(){
 
-        if (takePictures) {
-            // Some small delays so the picture is still
-            delay(1000L)
+        // If Firebase is being used: the phone app will control if pictures are being taken
+        // If not being used: the robot will always take pictures
+        if (takePictures || !USING_FIREBASE) {
+            // Some small delays so the robot stops moving and the picture is still
+            delay(cameraDelay)
             camera.takePicture()
-            delay(1000L)
+            delay(cameraDelay)
         }
 
-        //Log.w(TAG, moveDirection)
         when (moveDirection) {
             "forward" -> {
                 twoHats.forward()
@@ -252,7 +306,7 @@ class MainActivity : Activity() {
                 delay(WALK_DELAY)
                 twoHats.forward()
                 delay(WALK_DELAY)
-                Log.w(TAG, moveDirection)
+                Log.d(TAG, "forward")
             }
             "left" -> {
                 twoHats.turnCounterClockwise()
@@ -261,7 +315,7 @@ class MainActivity : Activity() {
                 delay(TURN_DELAY)
                 twoHats.turnCounterClockwise()
                 delay(TURN_DELAY)
-                Log.w(TAG, moveDirection)
+                Log.d(TAG, "left")
             }
             "right" -> {
                 twoHats.turnClockwise()
@@ -270,75 +324,25 @@ class MainActivity : Activity() {
                 delay(TURN_DELAY)
                 twoHats.turnClockwise()
                 delay(TURN_DELAY)
-                Log.w(TAG, moveDirection)
+                Log.d(TAG, "right")
+            }
+            "stand" -> {
+                twoHats.standStill()
+                delay(WALK_DELAY)
+                twoHats.standStill()
+                delay(WALK_DELAY)
+                twoHats.standStill()
+                delay(WALK_DELAY)
+                Log.d(TAG, "stand")
             }
             else -> {
                 /*
-                twoHats.standStill()
-                delay(WALK_DELAY)
-                twoHats.standStill()
-                delay(WALK_DELAY)
-                twoHats.standStill()
-                delay(WALK_DELAY)
-                Log.w(TAG, moveDirection)
-                */
-                twoHats.store()
-                delay(WALK_DELAY)
-                twoHats.store()
-                delay(WALK_DELAY)
+                    TO DO: Check the knees of the robot before enabling the store() calls.
+                 */
                 twoHats.store()
                 delay(WALK_DELAY)
             }
         }
-
-        /*
-        if (HW_TEST) {
-            // test() takes the servos to their resting position
-            twoHats.test()
-        } else {
-            // Put a cute walking routine here :^)
-            twoHats.forward()
-            delay(WALK_DELAY)
-            twoHats.forward()
-            delay(WALK_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-
-            /*
-            twoHats.forward()
-            delay(WALK_DELAY)
-            twoHats.forward()
-            delay(WALK_DELAY)
-            twoHats.forward()
-            delay(WALK_DELAY)
-            twoHats.forward()
-            delay(WALK_DELAY)
-
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            twoHats.turnCounterClockwise()
-            delay(TURN_DELAY)
-            */
-        }
-        */
 
         moveServo()
     }
