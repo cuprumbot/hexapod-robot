@@ -81,10 +81,13 @@ class MainActivity : Activity() {
     // Streaming
     private lateinit var socket: DatagramSocket
     private lateinit var packet: DatagramPacket
+    private lateinit var smallPacket: DatagramPacket
     private lateinit var address: InetAddress
     private var port = 0
     private var bufferSize = 255
     private var buffer = ByteArray(bufferSize)
+    private var smallBufferSize = 3
+    private var smallBuffer = ByteArray(smallBufferSize)
 
     // Get from Firebase to control the robot
     private var takePictures = false
@@ -154,6 +157,7 @@ class MainActivity : Activity() {
             // Streaming
             socket = DatagramSocket(4445)
             packet = DatagramPacket(buffer, bufferSize)
+            smallPacket = DatagramPacket(smallBuffer, smallBufferSize)
 
             socket.receive(packet)
             Log.i(TAG, "Got the starting datagram!")
@@ -298,8 +302,24 @@ class MainActivity : Activity() {
             delay(cameraDelay)
         }
 
+        if (!USING_FIREBASE) {
+            try {
+                socket.soTimeout = 1000
+                socket.receive(smallPacket)
+                moveDirection = smallPacket.data.toString(Charsets.US_ASCII)
+
+                val looksLike = smallPacket.data.contentToString()
+
+                Log.e(TAG, "looks like: $looksLike")
+                Log.e(TAG, "moving to: $moveDirection")
+                socket.soTimeout = 0
+            } catch (e: Exception) {
+                Log.e(TAG, "didn't got a datagram")
+            }
+        }
+
         when (moveDirection) {
-            "forward" -> {
+            "for", "forward" -> {
                 twoHats.forward()
                 delay(WALK_DELAY)
                 twoHats.forward()
@@ -308,7 +328,7 @@ class MainActivity : Activity() {
                 delay(WALK_DELAY)
                 Log.d(TAG, "forward")
             }
-            "left" -> {
+            "lef", "left" -> {
                 twoHats.turnCounterClockwise()
                 delay(TURN_DELAY)
                 twoHats.turnCounterClockwise()
@@ -317,7 +337,7 @@ class MainActivity : Activity() {
                 delay(TURN_DELAY)
                 Log.d(TAG, "left")
             }
-            "right" -> {
+            "rig", "right" -> {
                 twoHats.turnClockwise()
                 delay(TURN_DELAY)
                 twoHats.turnClockwise()
@@ -326,7 +346,7 @@ class MainActivity : Activity() {
                 delay(TURN_DELAY)
                 Log.d(TAG, "right")
             }
-            "stand" -> {
+            "sta", "stand" -> {
                 twoHats.standStill()
                 delay(WALK_DELAY)
                 twoHats.standStill()
