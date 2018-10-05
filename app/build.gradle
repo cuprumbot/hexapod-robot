@@ -19,11 +19,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-    sourceSets {
-        main {
-            assets.srcDirs = ['./assets']
-        }
-    }
+
     // Required to enable TF Lite to read model files directly from assets/
     aaptOptions {
         noCompress "tflite"
