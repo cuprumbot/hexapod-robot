@@ -45,8 +45,11 @@ const val MAX_ANGLE_DEG = 180.0
 const val MIN_CHANNEL = 0
 const val MAX_CHANNEL = 15
 // Delays
-const val TURN_DELAY = 600L
-const val WALK_DELAY = 1000L
+const val TURN_DELAY = 1200L        // TO DO: Reduce to 800+
+const val WALK_DELAY = 3200L        // TO DO: Reduce to 2900+
+const val STAND_DELAY = 600L        // TO DO: Reduce to 300+
+const val STORE_DELAY = 600L        // TO DO: Reduce to 600+
+
 /*
     Other
  */
@@ -105,11 +108,13 @@ class MainActivity : Activity() {
         }
 
         // Init Firebase
+        /*
         database = FirebaseDatabase.getInstance()
         storage = FirebaseStorage.getInstance()
 
         cameraState = FirebaseDatabase.getInstance().reference.child("camera")
         moveState = FirebaseDatabase.getInstance().reference.child("movement")
+        */
 
         // Thread for camera
         cameraHandlerThread = HandlerThread("CameraBackground")
@@ -125,6 +130,7 @@ class MainActivity : Activity() {
         camera = CameraHelper
         camera.initializeCamera(this, cameraHandler, onImageAvailableListener)
 
+        /*
         val cameraStateListener = object: ValueEventListener {
             override fun onDataChange(dataSnapshot: DataSnapshot) {
                 takePictures = (dataSnapshot.child("state").value.toString() == "started")
@@ -135,7 +141,9 @@ class MainActivity : Activity() {
             }
         }
         cameraState.addValueEventListener(cameraStateListener)
+        */
 
+        /*
         val moveStateListener = object: ValueEventListener {
             override fun onDataChange(dataSnapshot: DataSnapshot) {
                 moveDirection = dataSnapshot.child("state").value.toString()
@@ -146,10 +154,12 @@ class MainActivity : Activity() {
             }
         }
         moveState.addValueEventListener(moveStateListener)
+        */
 
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
 
+        /*
         if (!USING_FIREBASE) {
             cameraDelay = 300L
 
@@ -165,11 +175,14 @@ class MainActivity : Activity() {
             port = packet.port
             Log.d(TAG, "Address $address - Port: $port")
         }
+        */
 
         // Start the coroutine
         launch {
             delay(1000L)
             Log.i(TAG,"Starting!")
+
+
             moveServo()
         }
 
@@ -206,6 +219,7 @@ class MainActivity : Activity() {
             The next code fixes that, although in a slow way because of the file conversions.
          */
 
+        /*
         // First convert the JPEG image that the camera captured to a BMP
         val bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
         val bytes = bmp.byteCount
@@ -222,6 +236,7 @@ class MainActivity : Activity() {
         } else {
             onPictureTakenLocal(out)
         }
+        */
     }
 
     private fun onPictureTakenLocal(imageBytes: ByteArray) {
@@ -293,15 +308,31 @@ class MainActivity : Activity() {
     // Make the robot walk and take pictures every time it stops
     private suspend fun moveServo(){
 
+        //twoHats.callibrate()
+        twoHats.forwardTest()
+        delay(WALK_DELAY)
+        twoHats.turnClockwise()
+        delay(TURN_DELAY)
+        twoHats.forwardTest()
+        delay(WALK_DELAY)
+        twoHats.turnCounterClockwise()
+        delay(TURN_DELAY)
+        twoHats.standStill()
+        delay(WALK_DELAY)
+        Log.d("stand", "IM WALKING")
+
         // If Firebase is being used: the phone app will control if pictures are being taken
         // If not being used: the robot will always take pictures
+        /*
         if (takePictures || !USING_FIREBASE) {
             // Some small delays so the robot stops moving and the picture is still
             delay(cameraDelay)
             camera.takePicture()
             delay(cameraDelay)
         }
+        */
 
+        /*
         if (!USING_FIREBASE) {
             try {
                 socket.soTimeout = 1000
@@ -320,19 +351,11 @@ class MainActivity : Activity() {
 
         when (moveDirection) {
             "for", "forward" -> {
-                twoHats.forward()
-                delay(WALK_DELAY)
-                twoHats.forward()
-                delay(WALK_DELAY)
-                twoHats.forward()
+                twoHats.forwardTest()
                 delay(WALK_DELAY)
                 Log.d(TAG, "forward")
             }
             "lef", "left" -> {
-                twoHats.turnCounterClockwise()
-                delay(TURN_DELAY)
-                twoHats.turnCounterClockwise()
-                delay(TURN_DELAY)
                 twoHats.turnCounterClockwise()
                 delay(TURN_DELAY)
                 Log.d(TAG, "left")
@@ -340,19 +363,11 @@ class MainActivity : Activity() {
             "rig", "right" -> {
                 twoHats.turnClockwise()
                 delay(TURN_DELAY)
-                twoHats.turnClockwise()
-                delay(TURN_DELAY)
-                twoHats.turnClockwise()
-                delay(TURN_DELAY)
                 Log.d(TAG, "right")
             }
             "sta", "stand" -> {
                 twoHats.standStill()
-                delay(WALK_DELAY)
-                twoHats.standStill()
-                delay(WALK_DELAY)
-                twoHats.standStill()
-                delay(WALK_DELAY)
+                delay(STAND_DELAY)
                 Log.d(TAG, "stand")
             }
             else -> {
@@ -363,6 +378,7 @@ class MainActivity : Activity() {
                 delay(WALK_DELAY)
             }
         }
+        */
 
         moveServo()
     }

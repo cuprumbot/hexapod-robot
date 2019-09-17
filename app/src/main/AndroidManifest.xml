@@ -25,7 +25,7 @@
                 Use HOME for newer versions
                 <category android:name="android.intent.category.HOME"/>
                 -->
-                <category android:name="android.intent.category.IOT_LAUNCHER"/>
+                <category android:name="android.intent.category.HOME"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </activity>

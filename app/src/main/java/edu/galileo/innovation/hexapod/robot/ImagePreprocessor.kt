@@ -94,13 +94,13 @@ class ImagePreprocessor(previewWidth: Int, previewHeight: Int,
                     bitmap.width, bitmap.height, file.absolutePath))
 
             file.delete()
-
+/* UNDO THIS
             try {
                 FileOutputStream(file).use { fs -> BufferedOutputStream(fs).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 99, out) } }
             } catch (e: Exception) {
                 Log.w("ImageHelper", "Could not save image for debugging", e)
             }
-
+*/
         }
 
         internal fun cropAndRescaleBitmap(src: Bitmap, dst: Bitmap,

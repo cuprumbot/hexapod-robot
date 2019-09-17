@@ -41,6 +41,7 @@ object TensorFlowHelper {
     fun readLabels(context: Context, labelsFile: String): List<String> {
         val assetManager = context.assets
         val result = ArrayList<String>()
+        /*
         try {
             assetManager.open(labelsFile).use { `is` ->
                 BufferedReader(InputStreamReader(`is`)).use { br ->
@@ -56,7 +57,8 @@ object TensorFlowHelper {
         } catch (ex: IOException) {
             throw IllegalStateException("Cannot read labels from $labelsFile")
         }
-
+        */
+        return ArrayList<String>()
     }
 
     /**
