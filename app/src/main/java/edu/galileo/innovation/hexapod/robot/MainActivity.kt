@@ -56,6 +56,12 @@ const val STORE_DELAY = 600L        // TO DO: Reduce to 600+
 const val TAG = "Main"
 const val USING_FIREBASE = false
 
+const val USING_LOCAL_PHOTO = false
+const val USING_LOCAL_CONTROL = false
+
+const val USING_FIREBASE_PHOTO = false
+const val USING_FIREBASE_CONTROL = false
+
 class MainActivity : Activity() {
 
     // Servos
@@ -108,13 +114,15 @@ class MainActivity : Activity() {
         }
 
         // Init Firebase
-        /*
-        database = FirebaseDatabase.getInstance()
-        storage = FirebaseStorage.getInstance()
+        if (USING_FIREBASE_CONTROL || USING_FIREBASE_PHOTO) {
+            database = FirebaseDatabase.getInstance()
+            storage = FirebaseStorage.getInstance()
 
-        cameraState = FirebaseDatabase.getInstance().reference.child("camera")
-        moveState = FirebaseDatabase.getInstance().reference.child("movement")
-        */
+            cameraState = FirebaseDatabase.getInstance().reference.child("camera")
+            moveState = FirebaseDatabase.getInstance().reference.child("movement")
+        } else {
+            Log.d("Init Firebase", "Firebase not being used")
+        }
 
         // Thread for camera
         cameraHandlerThread = HandlerThread("CameraBackground")
@@ -130,37 +138,40 @@ class MainActivity : Activity() {
         camera = CameraHelper
         camera.initializeCamera(this, cameraHandler, onImageAvailableListener)
 
-        /*
-        val cameraStateListener = object: ValueEventListener {
-            override fun onDataChange(dataSnapshot: DataSnapshot) {
-                takePictures = (dataSnapshot.child("state").value.toString() == "started")
-            }
+        // Listener to control camera via Firebase + app
+        if (USING_FIREBASE_PHOTO) {
+            val cameraStateListener = object : ValueEventListener {
+                override fun onDataChange(dataSnapshot: DataSnapshot) {
+                    takePictures = (dataSnapshot.child("state").value.toString() == "started")
+                }
 
-            override fun onCancelled(databaseError: DatabaseError) {
-                Log.w(TAG, "cameraStateListener.onCancelled()")
+                override fun onCancelled(databaseError: DatabaseError) {
+                    Log.w(TAG, "cameraStateListener.onCancelled()")
+                }
             }
+            cameraState.addValueEventListener(cameraStateListener)
         }
-        cameraState.addValueEventListener(cameraStateListener)
-        */
 
-        /*
-        val moveStateListener = object: ValueEventListener {
-            override fun onDataChange(dataSnapshot: DataSnapshot) {
-                moveDirection = dataSnapshot.child("state").value.toString()
-            }
+        // Listener to control movement via Firebase + app
+        if (USING_FIREBASE_CONTROL) {
+            val moveStateListener = object : ValueEventListener {
+                override fun onDataChange(dataSnapshot: DataSnapshot) {
+                    moveDirection = dataSnapshot.child("state").value.toString()
+                }
 
-            override fun onCancelled(databaseError: DatabaseError) {
-                Log.w(TAG, "moveStateListener.onCancelled()")
+                override fun onCancelled(databaseError: DatabaseError) {
+                    Log.w(TAG, "moveStateListener.onCancelled()")
+                }
             }
+            moveState.addValueEventListener(moveStateListener)
         }
-        moveState.addValueEventListener(moveStateListener)
-        */
 
+        // :(
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
 
-        /*
-        if (!USING_FIREBASE) {
+        // Init UDP connection, wait for the first message from the app to get the IP
+        if (USING_LOCAL_PHOTO || USING_LOCAL_CONTROL) {
             cameraDelay = 300L
 
             Log.i(TAG, "Waiting for a datagram")
@@ -174,14 +185,14 @@ class MainActivity : Activity() {
             address = packet.address
             port = packet.port
             Log.d(TAG, "Address $address - Port: $port")
+        } else {
+            Log.d("Init UDP", "Local connection not being used")
         }
-        */
 
         // Start the coroutine
         launch {
             delay(1000L)
             Log.i(TAG,"Starting!")
-
 
             moveServo()
         }
@@ -219,6 +230,8 @@ class MainActivity : Activity() {
             The next code fixes that, although in a slow way because of the file conversions.
          */
 
+        // TO DO: CHECK THIS!!!
+
         /*
         // First convert the JPEG image that the camera captured to a BMP
         val bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
@@ -231,15 +244,16 @@ class MainActivity : Activity() {
         // onPictureTaken() requires a byte array
         val out = outStream.toByteArray()
 
-        if (USING_FIREBASE) {
+        if (USING_FIREBASE_PHOTO) {
             onPictureTaken(out)
-        } else {
+        } else if (USING_LOCAL_VIDEO) {
             onPictureTakenLocal(out)
         }
         */
     }
 
     private fun onPictureTakenLocal(imageBytes: ByteArray) {
+        // Break if the image is too big
         if (imageBytes.size > 60000) { return }
 
         var dataPacket = DatagramPacket(imageBytes, imageBytes.size, address, port)
@@ -308,78 +322,85 @@ class MainActivity : Activity() {
     // Make the robot walk and take pictures every time it stops
     private suspend fun moveServo(){
 
-        //twoHats.callibrate()
-        twoHats.forwardTest()
-        delay(WALK_DELAY)
-        twoHats.turnClockwise()
-        delay(TURN_DELAY)
-        twoHats.forwardTest()
-        delay(WALK_DELAY)
-        twoHats.turnCounterClockwise()
-        delay(TURN_DELAY)
-        twoHats.standStill()
-        delay(WALK_DELAY)
-        Log.d("stand", "IM WALKING")
-
         // If Firebase is being used: the phone app will control if pictures are being taken
         // If not being used: the robot will always take pictures
-        /*
-        if (takePictures || !USING_FIREBASE) {
+        if ((USING_FIREBASE_PHOTO && takePictures) || USING_LOCAL_PHOTO) {
             // Some small delays so the robot stops moving and the picture is still
             delay(cameraDelay)
             camera.takePicture()
             delay(cameraDelay)
         }
-        */
 
-        /*
-        if (!USING_FIREBASE) {
+        // Capture UDP message sent from the app
+        if (USING_LOCAL_CONTROL) {
             try {
                 socket.soTimeout = 1000
                 socket.receive(smallPacket)
                 moveDirection = smallPacket.data.toString(Charsets.US_ASCII)
-
                 val looksLike = smallPacket.data.contentToString()
 
-                Log.e(TAG, "looks like: $looksLike")
-                Log.e(TAG, "moving to: $moveDirection")
+                // TO DO: Check the contents of moveDirection and looksLike
+
+                Log.i(TAG, "looks like: $looksLike")
+                Log.i(TAG, "moving to: $moveDirection")
                 socket.soTimeout = 0
             } catch (e: Exception) {
                 Log.e(TAG, "didn't got a datagram")
             }
         }
 
-        when (moveDirection) {
-            "for", "forward" -> {
-                twoHats.forwardTest()
-                delay(WALK_DELAY)
-                Log.d(TAG, "forward")
+        // Check the direction in case the app sent a message via UDP or updated the direction on Firebase
+        if (USING_FIREBASE_CONTROL || USING_LOCAL_CONTROL) {
+            when (moveDirection) {
+                "for", "forward" -> {
+                    twoHats.forwardTest()
+                    delay(WALK_DELAY)
+                    //Log.d(TAG, "forward")
+                }
+                "lef", "left" -> {
+                    twoHats.turnCounterClockwise()
+                    delay(TURN_DELAY)
+                    //Log.d(TAG, "left")
+                }
+                "rig", "right" -> {
+                    twoHats.turnClockwise()
+                    delay(TURN_DELAY)
+                    //Log.d(TAG, "right")
+                }
+                "sta", "stand" -> {
+                    twoHats.standStill()
+                    delay(STAND_DELAY)
+                    //Log.d(TAG, "stand")
+                }
+                else -> {
+                    /*
+                        TO DO: Check the knees of the robot before enabling the store() calls.
+                     */
+                    //twoHats.store()
+                    //delay(WALK_DELAY)
+                }
             }
-            "lef", "left" -> {
-                twoHats.turnCounterClockwise()
-                delay(TURN_DELAY)
-                Log.d(TAG, "left")
-            }
-            "rig", "right" -> {
-                twoHats.turnClockwise()
-                delay(TURN_DELAY)
-                Log.d(TAG, "right")
-            }
-            "sta", "stand" -> {
-                twoHats.standStill()
-                delay(STAND_DELAY)
-                Log.d(TAG, "stand")
-            }
-            else -> {
-                /*
-                    TO DO: Check the knees of the robot before enabling the store() calls.
-                 */
-                twoHats.store()
-                delay(WALK_DELAY)
-            }
-        }
-        */
+            Log.d("Walk", "Direction: $moveDirection")
 
+            // Default routine
+        } else {
+            //twoHats.callibrate()
+            //delay(WALK_DELAY)
+
+            twoHats.forwardTest()
+            delay(WALK_DELAY)
+            twoHats.turnClockwise()
+            delay(TURN_DELAY)
+            twoHats.forwardTest()
+            delay(WALK_DELAY)
+            twoHats.turnCounterClockwise()
+            delay(TURN_DELAY)
+            twoHats.standStill()
+            delay(WALK_DELAY)
+
+            Log.d("Walk", "Walking using the default routine")
+        }
+        
         moveServo()
     }
 }
